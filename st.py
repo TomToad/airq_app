@@ -69,34 +69,52 @@ def get_air_quality_status(pm25_value):
 
 # --- Funkcija za gauge chart ---
 def create_gauge_chart(value, title, max_value=150):
-    """Kreira gauge chart za polutant"""
+    """Kreira profesionalan gauge chart za polutant"""
     fig = go.Figure(go.Indicator(
         mode="gauge+number",
         value=value if pd.notna(value) else 0,
-        title={'text': title, 'font': {'size': 16}},
-        number={'suffix': " µg/m³", 'font': {'size': 24}},
+        title={'text': title, 'font': {'size': 18, 'family': 'Arial, sans-serif', 'color': '#E0E0E0'}},
+        number={
+            'suffix': " µg/m³", 
+            'font': {'size': 32, 'family': 'Arial, sans-serif', 'color': '#FFFFFF'},
+            'valueformat': '.1f'
+        },
         gauge={
-            'axis': {'range': [None, max_value], 'tickwidth': 1},
-            'bar': {'color': "darkblue", 'thickness': 0.3},
-            'bgcolor': "white",
+            'axis': {
+                'range': [None, max_value],
+                'tickwidth': 2,
+                'tickcolor': "#444444",
+                'tickfont': {'size': 12, 'color': '#999999'},
+                'showticklabels': True
+            },
+            'bar': {
+                'color': "#1E88E5",
+                'thickness': 0.25,
+                'line': {'color': '#0D47A1', 'width': 2}
+            },
+            'bgcolor': "#1a1a1a",
+            'borderwidth': 3,
+            'bordercolor': "#333333",
             'steps': [
-                {'range': [0, 12], 'color': "#90EE90"},
-                {'range': [12, 35.4], 'color': "#FFEB3B"},
-                {'range': [35.4, 55.4], 'color': "#FF9800"},
-                {'range': [55.4, 150], 'color': "#F44336"}
+                {'range': [0, 12], 'color': "#2E7D32", 'line': {'width': 0}},
+                {'range': [12, 35.4], 'color': "#F9A825", 'line': {'width': 0}},
+                {'range': [35.4, 55.4], 'color': "#EF6C00", 'line': {'width': 0}},
+                {'range': [55.4, max_value], 'color': "#C62828", 'line': {'width': 0}}
             ],
             'threshold': {
-                'line': {'color': "red", 'width': 3},
-                'thickness': 0.75,
+                'line': {'color': "#FF1744", 'width': 4},
+                'thickness': 0.8,
                 'value': 55.4
             }
         }
     ))
     
     fig.update_layout(
-        height=250,
-        margin=dict(l=20, r=20, t=50, b=20),
-        paper_bgcolor="white"
+        height=280,
+        margin=dict(l=10, r=10, t=60, b=10),
+        paper_bgcolor="#0e1117",
+        plot_bgcolor="#0e1117",
+        font={'color': '#E0E0E0', 'family': 'Arial, sans-serif'}
     )
     
     return fig
