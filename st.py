@@ -95,7 +95,8 @@ try:
         # --- Tablica podataka ---
         st.subheader("Tablica podataka")
         df_to_show = df.drop(columns=["id", "locationID"])
-        st.dataframe(df_to_show.set_index("timestamp"))
+        st.dataframe(df_to_show.sort_values("timestamp", ascending=False).set_index("timestamp"))
+
 
     conn.close()
 
