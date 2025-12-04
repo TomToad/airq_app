@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 import plotly.express as px
 
 # --- Dropbox URL (direktni link ?dl=1) ---
-DB_URL = "https://www.dropbox.com/scl/fi/du8k3t4720bxdm01b8eex/airq.db?rlkey=3elgzgmos9bbttezt2hg2d4ae&st=kfqkx07d&dl=1"
+DB_URL = "https://www.dropbox.com/scl/fi/lfygx5rljeldwg4u0fjhe/airq.db?rlkey=2f3eu1bfxaq05u2gmgzqrydyr&st=97y7c7z2&dl=1"
 LOCAL_DB = "airq.db"  # lokalna kopija koju Streamlit koristi
 
 st.title("Kvaliteta zraka - Zaprešić")
