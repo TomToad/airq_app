@@ -4,6 +4,7 @@ import sqlite3
 import os
 import requests
 from datetime import datetime, timedelta
+import plotly.express as px
 
 # --- Dropbox URL (direktni link ?dl=1) ---
 DB_URL = "https://www.dropbox.com/scl/fi/du8k3t4720bxdm01b8eex/airq.db?rlkey=3elgzgmos9bbttezt2hg2d4ae&st=kfqkx07d&dl=1"
@@ -17,7 +18,6 @@ try:
     r.raise_for_status()
     with open(LOCAL_DB, "wb") as f:
         f.write(r.content)
-    ##st.success("Baza preuzeta s Dropboxa.")
 except Exception as e:
     if os.path.exists(LOCAL_DB):
         st.warning(f"Nije moguće preuzeti bazu: {e}. Koristi se lokalna kopija.")
@@ -64,17 +64,36 @@ try:
     if df.empty:
         st.warning("Nema podataka za odabrani vremenski raspon.")
     else:
+        # --- Konverzija timestamp u datetime ---
         df["timestamp"] = pd.to_datetime(df["timestamp"])
 
+        # --- Plotly graf: Temperatura i Vlažnost ---
         st.subheader("Temperatura i Vlažnost")
-        st.line_chart(df.set_index("timestamp")[["temperature", "humidity"]])
+        fig_temp = px.line(
+            df,
+            x="timestamp",
+            y=["temperature", "humidity"],
+            labels={"value": "Vrijednost", "timestamp": "Vrijeme"},
+            title="Temperatura i Vlažnost"
+        )
+        fig_temp.update_xaxes(tickformat="%H:%M")  # 24h format
+        st.plotly_chart(fig_temp, use_container_width=True)
 
+        # --- Plotly graf: Polutanti ---
         st.subheader("Polutanti")
         pollutants = ["NO2", "O3", "SO2", "PM10", "PM2_5"]
-        st.line_chart(df.set_index("timestamp")[pollutants])
+        fig_pollutants = px.line(
+            df,
+            x="timestamp",
+            y=pollutants,
+            labels={"value": "Koncentracija", "timestamp": "Vrijeme"},
+            title="Polutanti"
+        )
+        fig_pollutants.update_xaxes(tickformat="%H:%M")  # 24h format
+        st.plotly_chart(fig_pollutants, use_container_width=True)
 
-        st.subheader("Tabela podataka")
-        # --- Sakrij id i locationID ---
+        # --- Tablica podataka ---
+        st.subheader("Tablica podataka")
         df_to_show = df.drop(columns=["id", "locationID"])
         st.dataframe(df_to_show.set_index("timestamp"))
 
