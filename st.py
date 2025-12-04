@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 DB_URL = "https://www.dropbox.com/scl/fi/du8k3t4720bxdm01b8eex/airq.db?rlkey=3elgzgmos9bbttezt2hg2d4ae&st=kfqkx07d&dl=1"
 LOCAL_DB = "airq.db"  # lokalna kopija koju Streamlit koristi
 
-st.title("Kvaliteta zraka - pregled mjerenja")
+st.title("Kvaliteta zraka - Zaprešić")
 
 # --- Preuzmi najnoviju bazu s Dropboxa ---
 try:
