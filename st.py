@@ -346,9 +346,9 @@ try:
 
     # --- Učitaj podatke ---
     with st.spinner("Učitavanje podataka..."):
-        # Formatiraj datetime u string format koji odgovara bazi
-        start_str = start_datetime.strftime('%Y-%m-%d %H:%M:%S')
-        end_str = end_datetime.strftime('%Y-%m-%d %H:%M:%S')
+        # Formatiraj datetime u ISO format koji odgovara bazi (YYYY-MM-DDTHH:MM:SS)
+        start_str = start_datetime.strftime('%Y-%m-%dT%H:%M:%S')
+        end_str = end_datetime.strftime('%Y-%m-%dT%H:%M:%S')
         df = load_data(selected_loc_id, start_str, end_str)
 
     if df.empty:
