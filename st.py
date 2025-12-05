@@ -67,51 +67,51 @@ def get_air_quality_status(pm25_value):
     else:
         return "Vrlo nezdrava", "purple"
 
-# --- Funkcija za gauge chart ---
+# --- Funkcija za gauge chart sa kazaljkom ---
 def create_gauge_chart(value, title, max_value=150):
-    """Kreira profesionalan gauge chart za polutant"""
+    """Kreira gauge chart sa kazaljkom"""
     fig = go.Figure(go.Indicator(
         mode="gauge+number",
         value=value if pd.notna(value) else 0,
-        title={'text': title, 'font': {'size': 18, 'family': 'Arial, sans-serif', 'color': '#E0E0E0'}},
+        title={'text': title, 'font': {'size': 20, 'family': 'Arial, sans-serif', 'color': '#E0E0E0'}},
         number={
             'suffix': " µg/m³", 
-            'font': {'size': 32, 'family': 'Arial, sans-serif', 'color': '#FFFFFF'},
+            'font': {'size': 28, 'family': 'Arial, sans-serif', 'color': '#FFFFFF'},
             'valueformat': '.1f'
         },
         gauge={
             'axis': {
                 'range': [None, max_value],
                 'tickwidth': 2,
-                'tickcolor': "#444444",
-                'tickfont': {'size': 12, 'color': '#999999'},
+                'tickcolor': "#666666",
+                'tickfont': {'size': 13, 'color': '#AAAAAA'},
                 'showticklabels': True
             },
             'bar': {
-                'color': "#1E88E5",
-                'thickness': 0.25,
-                'line': {'color': '#0D47A1', 'width': 2}
+                'color': "#FF4444",
+                'thickness': 0.15,
+                'line': {'color': '#CC0000', 'width': 1}
             },
             'bgcolor': "#1a1a1a",
             'borderwidth': 3,
-            'bordercolor': "#333333",
+            'bordercolor': "#444444",
             'steps': [
-                {'range': [0, 12], 'color': "#2E7D32", 'line': {'width': 0}},
-                {'range': [12, 35.4], 'color': "#F9A825", 'line': {'width': 0}},
-                {'range': [35.4, 55.4], 'color': "#EF6C00", 'line': {'width': 0}},
-                {'range': [55.4, max_value], 'color': "#C62828", 'line': {'width': 0}}
+                {'range': [0, 12], 'color': "#2E7D32"},
+                {'range': [12, 35.4], 'color': "#F9A825"},
+                {'range': [35.4, 55.4], 'color': "#EF6C00"},
+                {'range': [55.4, max_value], 'color': "#C62828"}
             ],
             'threshold': {
-                'line': {'color': "#FF1744", 'width': 4},
-                'thickness': 0.8,
-                'value': 55.4
+                'line': {'color': "#FFFFFF", 'width': 3},
+                'thickness': 0.75,
+                'value': value if pd.notna(value) else 0
             }
         }
     ))
     
     fig.update_layout(
-        height=280,
-        margin=dict(l=10, r=10, t=60, b=10),
+        height=300,
+        margin=dict(l=20, r=20, t=70, b=20),
         paper_bgcolor="#0e1117",
         plot_bgcolor="#0e1117",
         font={'color': '#E0E0E0', 'family': 'Arial, sans-serif'}
@@ -251,34 +251,6 @@ def create_pollutants_chart(df, height=400):
     
     return fig
 
-# --- Funkcija za heatmap ---
-def create_heatmap(df, height=400):
-    """Kreira heatmap polutanata"""
-    pollutants = ["NO2", "O3", "SO2", "PM10", "PM2_5"]
-    pollutant_labels = ["NO₂", "O₃", "SO₂", "PM10", "PM2.5"]
-    
-    # Resample na hourly average
-    df_pivot = df.set_index('timestamp')[pollutants].resample('1H').mean()
-    
-    fig = go.Figure(data=go.Heatmap(
-        z=df_pivot.values.T,
-        x=df_pivot.index,
-        y=pollutant_labels,
-        colorscale='RdYlGn_r',
-        colorbar=dict(title="µg/m³"),
-        hovertemplate='%{y}: %{z:.1f} µg/m³<br>%{x|%d.%m. %H:%M}<extra></extra>'
-    ))
-    
-    fig.update_layout(
-        title="Toplinska Karta Polutanata (po satima)",
-        xaxis_title="Vrijeme",
-        yaxis_title="Polutant",
-        height=height,
-        margin=dict(l=50, r=50, t=80, b=50)
-    )
-    
-    return fig
-
 # --- Glavni program ---
 st.title("🌤️ Kvaliteta zraka - Zaprešić")
 
@@ -345,8 +317,6 @@ try:
         
         # Dodatne opcije
         st.subheader("🎨 Prikaz")
-        show_heatmap = st.checkbox("Prikaži toplinsku kartu", value=False)
-        show_raw_data = st.checkbox("Prikaži sirove podatke", value=False)
         chart_height = st.slider("Visina grafikona (px):", 300, 800, 450, 50)
 
     # --- Učitaj podatke ---
@@ -422,41 +392,12 @@ try:
         fig_pollutants = create_pollutants_chart(df, chart_height)
         st.plotly_chart(fig_pollutants, use_container_width=True)
         
-        # --- Sekcija 5: Heatmap (opcionalno) ---
-        if show_heatmap and len(df) > 24:  # Treba dovoljno podataka
-            st.divider()
-            st.header("🔥 Toplinska Karta")
-            fig_heatmap = create_heatmap(df, chart_height)
-            st.plotly_chart(fig_heatmap, use_container_width=True)
-        
         st.divider()
-        
-        # --- Statistika ---
-        st.header("📈 Statistički Pregled")
-        
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.subheader("Temperatura")
-            temp_stats = df["temperature"].describe()
-            st.dataframe(temp_stats.to_frame("°C"), use_container_width=True)
-        
-        with col2:
-            st.subheader("PM2.5")
-            pm25_stats = df["PM2_5"].describe()
-            st.dataframe(pm25_stats.to_frame("µg/m³"), use_container_width=True)
-        
-        with col3:
-            st.subheader("PM10")
-            pm10_stats = df["PM10"].describe()
-            st.dataframe(pm10_stats.to_frame("µg/m³"), use_container_width=True)
 
-        # --- Sirovi podaci ---
-        if show_raw_data:
-            st.divider()
-            st.header("📋 Tablica Podataka")
-            df_display = df.drop(columns=["id", "locationID"]).sort_values("timestamp", ascending=False)
-            st.dataframe(df_display, use_container_width=True, height=400)
+        # --- Sirovi podaci (uvijek prikazani) ---
+        st.header("📋 Tablica Podataka")
+        df_display = df.drop(columns=["id", "locationID"]).sort_values("timestamp", ascending=False)
+        st.dataframe(df_display, use_container_width=True, height=400)
         
         # --- Footer ---
         st.divider()
