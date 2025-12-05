@@ -11,7 +11,7 @@ import time
 import pytz 
 
 # --- Agresivno čišćenje cache-a na svakom rerunu ---
-# Ovo je ključno za osiguranje da Streamlit ne zadržava stare rezultate.
+# Ostavljamo ovo uključeno jer je ključno za testiranje promjena.
 st.cache_data.clear()
 st.cache_resource.clear()
 # ---------------------------------------------------
@@ -27,7 +27,6 @@ st.set_page_config(
 DB_URL = "https://www.dropbox.com/scl/fi/5m2y0t8vmj5e0mg2cc5j7/airq.db?rlkey=u9wgei8etxf3go1fke1orarom&dl=1"
 LOCAL_DB = "airq.db"
 ZAGREB_TZ = pytz.timezone('Europe/Zagreb')
-# UTC_TZ više nije potrebno
 
 # --- Cachirana funkcija za preuzimanje baze ---
 @st.cache_data(ttl=60)
@@ -59,12 +58,9 @@ def load_data(location_id, start_dt, end_dt):
     if not df.empty:
         df["timestamp"] = pd.to_datetime(df["timestamp"])
         
-        # JEDNOSTAVNA LOKALIZACIJA: Pretpostavi da je naivni zapis u bazi
-        # već u lokalnom vremenu i samo dodaj TZ oznaku za vizualizaciju.
+        # LOKALIZACIJA: Pretpostavi da je naivni zapis u bazi već u lokalnom vremenu
         if df["timestamp"].dt.tz is None:
             df["timestamp"] = df["timestamp"].dt.tz_localize(ZAGREB_TZ, ambiguous='NaT', nonexistent='NaT')
-        
-        # NEMA tz_convert() jer ne želimo mijenjati datum/vrijeme, već samo dodati oznaku.
         
     return df
 
@@ -94,10 +90,11 @@ def get_latest_measurement(location_id):
 
 # --- Funkcije za vizualizaciju (nepromijenjeno, skraćeno radi preglednosti) ---
 def get_air_quality_status(pm25_value):
-    # ... (kod ostaje isti)
     if pd.isna(pm25_value): return "Nema podataka", "gray"
     elif pm25_value <= 12: return "Dobra", "green"
-    # ... (ostatak koda) ...
+    elif pm25_value <= 35.4: return "Umjerena", "yellow"
+    elif pm25_value <= 55.4: return "Nezdrava za osjetljive", "orange"
+    elif pm25_value <= 150.4: return "Nezdrava", "red"
     else: return "Vrlo nezdrava", "purple"
 
 # ... (Ostale funkcije za grafikone su nepromijenjene) ...
@@ -124,7 +121,6 @@ try:
         st.warning("Nema lokacija u bazi.")
         st.stop()
     
-    # Koristimo trenutno LOKALNO vrijeme (TZ-aware)
     now_tz = datetime.now(ZAGREB_TZ)
 
     # --- Sidebar: Kontrole ---
@@ -171,9 +167,9 @@ try:
 
     # --- Učitaj podatke ---
     with st.spinner("Učitavanje podataka..."):
-        # KLJUČNA IZMJENA ZA UPIT: Koristimo LOKALNO, NAIVNO vrijeme za upit bazi.
-        start_str = start_datetime.tz_localize(None).strftime('%Y-%m-%dT%H:%M:%S')
-        end_str = end_datetime.tz_localize(None).strftime('%Y-%m-%dT%H:%M:%S')
+        # KLJUČNA IZMJENA ZA UPIT: Koristimo LOKALNO, NAIVNO vrijeme u formatu s razmakom
+        start_str = start_datetime.tz_localize(None).strftime('%Y-%m-%d %H:%M:%S') # Promjena: %Y-%m-%dT%H:%M:%S -> %Y-%m-%d %H:%M:%S
+        end_str = end_datetime.tz_localize(None).strftime('%Y-%m-%d %H:%M:%S')   # Promjena: %Y-%m-%dT%H:%M:%S -> %Y-%m-%d %H:%M:%S
         
         # Učitaj podatke za grafove (sada bi trebali biti u ispravnom rasponu)
         df = load_data(selected_loc_id, start_str, end_str)
