@@ -4,7 +4,6 @@ import sqlite3
 import os
 import requests
 from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -20,7 +19,6 @@ st.set_page_config(
 # --- Konstante ---
 DB_URL = "https://www.dropbox.com/scl/fi/5m2y0t8vmj5e0mg2cc5j7/airq.db?rlkey=u9wgei8etxf3go1fke1orarom&st=v1b5nhe5&dl=1"
 LOCAL_DB = "airq.db"
-ZAGREB_TZ = ZoneInfo("Europe/Zagreb")
 
 # --- Cachirana funkcija za preuzimanje baze ---
 @st.cache_data(ttl=60)
@@ -54,8 +52,8 @@ def load_data(location_id, start_dt, end_dt):
     conn.close()
     
     if not df.empty:
-        # Pokušaj parsirati timestamp - radi sa svim formatima
-        df["timestamp"] = pd.to_datetime(df["timestamp"], format='mixed', utc=True).dt.tz_convert(ZAGREB_TZ)
+        # Jednostavno - svi timestampovi su u lokalnom vremenu
+        df["timestamp"] = pd.to_datetime(df["timestamp"])
     
     return df
 
@@ -301,7 +299,7 @@ try:
             
             st.rerun()
         
-        st.caption(f"⏰ Zadnje osvježavanje: {datetime.now(ZAGREB_TZ).strftime('%H:%M:%S')}")
+        st.caption(f"⏰ Zadnje osvježavanje: {datetime.now().strftime('%H:%M:%S')}")
         
         st.divider()
         
@@ -317,7 +315,7 @@ try:
         
         # Vremenski raspon
         st.subheader("📅 Vremenski raspon")
-        now = datetime.now(ZAGREB_TZ)
+        now = datetime.now()
         
         quick_select = st.radio(
             "Brzi odabir:",
@@ -348,7 +346,10 @@ try:
 
     # --- Učitaj podatke ---
     with st.spinner("Učitavanje podataka..."):
-        df = load_data(selected_loc_id, start_datetime.isoformat(), end_datetime.isoformat())
+        # Formatiraj datetime u string format koji odgovara bazi
+        start_str = start_datetime.strftime('%Y-%m-%d %H:%M:%S')
+        end_str = end_datetime.strftime('%Y-%m-%d %H:%M:%S')
+        df = load_data(selected_loc_id, start_str, end_str)
 
     if df.empty:
         st.warning("📭 Nema podataka za odabrani vremenski raspon.")
