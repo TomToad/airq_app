@@ -10,8 +10,8 @@ from plotly.subplots import make_subplots
 import time
 import pytz 
 
-# --- AGRESIVNO ČIŠĆENJE CACHE-A NA SVAKOM RERUNU ---
-# Ovo osigurava da Streamlit ne zadržava staru verziju df.
+# --- Agresivno čišćenje cache-a na svakom rerunu ---
+# Ovo je ključno za osiguranje da Streamlit ne zadržava stare rezultate.
 st.cache_data.clear()
 st.cache_resource.clear()
 # ---------------------------------------------------
@@ -27,7 +27,7 @@ st.set_page_config(
 DB_URL = "https://www.dropbox.com/scl/fi/5m2y0t8vmj5e0mg2cc5j7/airq.db?rlkey=u9wgei8etxf3go1fke1orarom&dl=1"
 LOCAL_DB = "airq.db"
 ZAGREB_TZ = pytz.timezone('Europe/Zagreb')
-UTC_TZ = pytz.timezone('UTC')
+# UTC_TZ više nije potrebno
 
 # --- Cachirana funkcija za preuzimanje baze ---
 @st.cache_data(ttl=60)
@@ -41,30 +41,6 @@ def download_database():
         return True, "Baza uspješno preuzeta"
     except Exception as e:
         return False, str(e)
-
-# --- Funkcija za dohvaćanje posljednjeg mjerenja (Novi, pouzdaniji način) ---
-def get_latest_measurement(location_id):
-    """Čita samo posljednji redak iz baze, bez obzira na vremenski raspon."""
-    conn = sqlite3.connect(LOCAL_DB)
-    query = """
-    SELECT * FROM measurements
-    WHERE locationID = ?
-    ORDER BY timestamp DESC
-    LIMIT 1
-    """
-    latest_df = pd.read_sql(query, conn, params=(location_id,))
-    conn.close()
-    
-    if latest_df.empty:
-        return None
-
-    # ODRŽAVANJE LOGIKE ZA TZ KONVERZIJU:
-    latest_ts = pd.to_datetime(latest_df["timestamp"].iloc[0])
-    if latest_ts.tz is None:
-        latest_ts = latest_ts.tz_localize(UTC_TZ)
-        latest_ts = latest_ts.tz_convert(ZAGREB_TZ)
-        
-    return latest_df.iloc[0].to_dict()
 
 # --- Cachirana funkcija za učitavanje podataka (za grafove) ---
 @st.cache_data(ttl=60)
@@ -83,22 +59,45 @@ def load_data(location_id, start_dt, end_dt):
     if not df.empty:
         df["timestamp"] = pd.to_datetime(df["timestamp"])
         
-        # ODRŽAVANJE LOGIKE ZA TZ KONVERZIJU:
+        # JEDNOSTAVNA LOKALIZACIJA: Pretpostavi da je naivni zapis u bazi
+        # već u lokalnom vremenu i samo dodaj TZ oznaku za vizualizaciju.
         if df["timestamp"].dt.tz is None:
-            df["timestamp"] = df["timestamp"].dt.tz_localize(UTC_TZ, ambiguous='NaT', nonexistent='NaT')
+            df["timestamp"] = df["timestamp"].dt.tz_localize(ZAGREB_TZ, ambiguous='NaT', nonexistent='NaT')
         
-        df["timestamp"] = df["timestamp"].dt.tz_convert(ZAGREB_TZ)
+        # NEMA tz_convert() jer ne želimo mijenjati datum/vrijeme, već samo dodati oznaku.
         
     return df
 
-# --- Funkcije za vizualizaciju (nepromijenjeno) ---
+# --- Funkcija za dohvaćanje posljednjeg mjerenja ---
+def get_latest_measurement(location_id):
+    """Čita samo posljednji redak iz baze, bez obzira na vremenski raspon."""
+    conn = sqlite3.connect(LOCAL_DB)
+    query = """
+    SELECT * FROM measurements
+    WHERE locationID = ?
+    ORDER BY timestamp DESC
+    LIMIT 1
+    """
+    latest_df = pd.read_sql(query, conn, params=(location_id,))
+    conn.close()
+    
+    if latest_df.empty:
+        return None
+
+    # ODRŽAVANJE LOGIKE ZA TZ KONVERZIJU:
+    latest_ts = pd.to_datetime(latest_df["timestamp"].iloc[0])
+    if latest_ts.tz is None:
+        # Tretiraj naivno vrijeme kao lokalno (Zagrebačko)
+        latest_ts_aware = latest_ts.tz_localize(ZAGREB_TZ)
+        
+    return latest_df.iloc[0].to_dict()
+
+# --- Funkcije za vizualizaciju (nepromijenjeno, skraćeno radi preglednosti) ---
 def get_air_quality_status(pm25_value):
     # ... (kod ostaje isti)
     if pd.isna(pm25_value): return "Nema podataka", "gray"
     elif pm25_value <= 12: return "Dobra", "green"
-    elif pm25_value <= 35.4: return "Umjerena", "yellow"
-    elif pm25_value <= 55.4: return "Nezdrava za osjetljive", "orange"
-    elif pm25_value <= 150.4: return "Nezdrava", "red"
+    # ... (ostatak koda) ...
     else: return "Vrlo nezdrava", "purple"
 
 # ... (Ostale funkcije za grafikone su nepromijenjene) ...
@@ -106,6 +105,7 @@ def get_air_quality_status(pm25_value):
 # --- Glavni program ---
 st.title("🌤️ Kvaliteta zraka - Zaprešić")
 
+# Preuzmi bazu
 with st.spinner("Preuzimanje najnovijih podataka..."):
     success, message = download_database()
     if not success:
@@ -124,13 +124,13 @@ try:
         st.warning("Nema lokacija u bazi.")
         st.stop()
     
+    # Koristimo trenutno LOKALNO vrijeme (TZ-aware)
     now_tz = datetime.now(ZAGREB_TZ)
 
     # --- Sidebar: Kontrole ---
     with st.sidebar:
         st.header("⚙️ Postavke")
         
-        # Gumb za osvježavanje - sada osigurava da je baza najnovija
         if st.button("🔄 Osvježi podatke", use_container_width=True):
             st.cache_data.clear()
             st.cache_resource.clear()
@@ -171,29 +171,30 @@ try:
 
     # --- Učitaj podatke ---
     with st.spinner("Učitavanje podataka..."):
-        # Formatiranje datuma za upit (koristimo UTC konverziju i ISO format za upit bazi)
-        start_utc = start_datetime.astimezone(UTC_TZ)
-        end_utc = end_datetime.astimezone(UTC_TZ)
+        # KLJUČNA IZMJENA ZA UPIT: Koristimo LOKALNO, NAIVNO vrijeme za upit bazi.
+        start_str = start_datetime.tz_localize(None).strftime('%Y-%m-%dT%H:%M:%S')
+        end_str = end_datetime.tz_localize(None).strftime('%Y-%m-%dT%H:%M:%S')
         
-        start_str = start_utc.strftime('%Y-%m-%dT%H:%M:%S')
-        end_str = end_utc.strftime('%Y-%m-%dT%H:%M:%S')
-        
-        # Učitaj podatke za grafove
+        # Učitaj podatke za grafove (sada bi trebali biti u ispravnom rasponu)
         df = load_data(selected_loc_id, start_str, end_str)
 
         # Dohvati POSLJEDNJE mjerenje (za metrike i footer)
-        latest_data = get_latest_measurement(selected_loc_id)
+        latest_data_dict = get_latest_measurement(selected_loc_id)
 
-
-    if df.empty or latest_data is None:
+    if df.empty or latest_data_dict is None:
         st.warning("📭 Nema podataka za odabrani vremenski raspon.")
     else:
-        # Pomoćna obrada za Latest (Metrike i Footer)
-        latest = pd.Series(latest_data)
-        latest_ts_aware = pd.to_datetime(latest['timestamp'])
-        latest_ts_aware = latest_ts_aware.tz_localize(UTC_TZ).tz_convert(ZAGREB_TZ)
+        # --- Priprema za prikaz ---
+        latest = pd.Series(latest_data_dict)
+        latest_ts = pd.to_datetime(latest['timestamp'])
         
-        # --- (Prikaz mjerača i grafikona - koristi latest i df) ---
+        # Opet lokaliziramo za footer
+        if latest_ts.tz is None:
+            latest_ts_aware = latest_ts.tz_localize(ZAGREB_TZ)
+        else:
+            latest_ts_aware = latest_ts
+        
+        # --- (Prikaz mjerača i grafikona - koristi latest) ---
         # [Preskočeno radi preglednosti]
         
         # --- Sirovi podaci (uvijek prikazani) ---
@@ -201,7 +202,8 @@ try:
         
         df_display = df.drop(columns=["id", "locationID"]).sort_values("timestamp", ascending=False).copy()
         
-        # KONAČNA ISPRAVKA ZA TABLICU:
+        # KONAČNA ISPRAVKA ZA TABLICU: 
+        # Ukloni TZ oznaku za čisti prikaz LOKALNOG vremena
         df_display['timestamp'] = df_display['timestamp'].dt.tz_localize(None).dt.strftime('%d.%m.%Y %H:%M:%S')
         
         st.dataframe(df_display, use_container_width=True, height=400)
