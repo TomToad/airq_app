@@ -27,7 +27,6 @@ ZAGREB_TZ = pytz.timezone('Europe/Zagreb')
 def download_database():
     """Preuzmi bazu s Dropboxa"""
     try:
-        # Dodaj timestamp za cache-busting
         cache_buster = f"&_t={int(time.time())}"
         url = DB_URL + cache_buster
         
@@ -56,7 +55,7 @@ def load_data(location_id, start_dt, end_dt):
     if not df.empty:
         df["timestamp"] = pd.to_datetime(df["timestamp"])
         
-        # OBAVEZNA LOKALIZACIJA: pretpostavlja se da su zapisi u bazi snimljeni kao lokalno vrijeme
+        # LOKALIZACIJA: pretpostavljamo da su zapisi u bazi snimljeni kao lokalno vrijeme
         if df["timestamp"].dt.tz is None:
             df["timestamp"] = df["timestamp"].dt.tz_localize(ZAGREB_TZ, ambiguous='NaT', nonexistent='NaT')
         
@@ -294,12 +293,9 @@ try:
         
         # Gumb za osvježavanje
         if st.button("🔄 Osvježi podatke", use_container_width=True):
-            # Obriši SVE cache-ove
             st.cache_data.clear()
-            # Ažurirajte 'now_tz' kako bi prikazao točno vrijeme nakon klika i reruna
             now_tz = datetime.now(ZAGREB_TZ)
             
-            # Forsiraj novi download baze
             with st.spinner("Preuzimanje najnovije baze..."):
                 success, msg = download_database()
                 if success:
@@ -309,7 +305,6 @@ try:
             
             st.rerun()
         
-        # PRIKAZ VREMENA OSVJEŽAVANJA
         st.caption(f"⏰ Zadnje osvježavanje: {now_tz.strftime('%d.%m.%Y %H:%M:%S')}")
         
         st.divider()
@@ -344,13 +339,11 @@ try:
             start_datetime = now_tz - timedelta(days=30)
             end_datetime = now_tz
         else:
-            # Ukloni TZ za widget za odabir datuma, ali koristi ispravnu lokalnu zonu
             naive_now = now_tz.replace(tzinfo=None) 
             
             start_date = st.date_input("Od:", naive_now.date() - timedelta(days=7))
             end_date = st.date_input("Do:", naive_now.date())
             
-            # Postavi TZ informaciju nazad za konačne varijable
             start_datetime = ZAGREB_TZ.localize(datetime.combine(start_date, datetime.min.time()))
             end_datetime = ZAGREB_TZ.localize(datetime.combine(end_date, datetime.max.time()))
         
@@ -362,7 +355,6 @@ try:
 
     # --- Učitaj podatke ---
     with st.spinner("Učitavanje podataka..."):
-        # Formatiraj datetime za SQLite upit (koji očekuje naivni string, npr. '2025-12-05 11:23:02')
         start_str = start_datetime.strftime('%Y-%m-%d %H:%M:%S')
         end_str = end_datetime.strftime('%Y-%m-%d %H:%M:%S')
         
@@ -373,6 +365,9 @@ try:
     else:
         latest = df.iloc[-1]
         status, color = get_air_quality_status(latest["PM2_5"])
+        
+        # ... (Vizualizacije ostaju iste) ...
+        # (Preskačem kod za vizualizacije radi preglednosti)
         
         # --- Sekcija 1: Gauge mjerači (trenutno stanje) ---
         st.header("📊 Trenutno Stanje")
@@ -409,7 +404,6 @@ try:
             st.markdown(f"<h2 style='color: {color}; text-align: center;'>{status}</h2>", unsafe_allow_html=True)
             st.caption(f"PM2.5: {latest['PM2_5']:.1f} µg/m³" if pd.notna(latest['PM2_5']) else "Nema podataka")
         
-        # Alert ako je loše
         if pd.notna(latest["PM2_5"]):
             if latest["PM2_5"] > 55.4:
                 st.error("🚨 UPOZORENJE: Kvaliteta zraka je nezdrava! Preporučuje se izbjegavanje aktivnosti vani.")
@@ -418,41 +412,41 @@ try:
         
         st.divider()
         
-        # --- Sekcija 2: Area chart (temperatura/vlažnost) ---
         st.header("🌡️ Temperatura i Vlažnost")
         fig_temp = create_temp_humidity_chart(df, chart_height)
         st.plotly_chart(fig_temp, use_container_width=True)
         
         st.divider()
         
-        # --- Sekcija 3: Stacked area (PM čestice) ---
         st.header("🌫️ Čestične Tvari")
         fig_pm = create_pm_stacked_chart(df, chart_height)
         st.plotly_chart(fig_pm, use_container_width=True)
         
         st.divider()
         
-        # --- Sekcija 4: Line chart (ostali polutanti) ---
         st.header("🏭 Plinovi")
         fig_pollutants = create_pollutants_chart(df, chart_height)
         st.plotly_chart(fig_pollutants, use_container_width=True)
         
         st.divider()
-
+        
         # --- Sirovi podaci (uvijek prikazani) ---
         st.header("📋 Tablica Podataka")
+        
+        # KREIRANJE KOPIJE ZA PRIKAZ
         df_display = df.drop(columns=["id", "locationID"]).sort_values("timestamp", ascending=False).copy()
         
-        # Formatiranje TZ-aware timestampa u tablici radi čitljivosti
-        df_display['timestamp'] = df_display['timestamp'].dt.strftime('%d.%m.%Y %H:%M:%S')
+        # KLJUČNA ISPRAVKA: Ukloni TZ informaciju kako bi Streamlit / Pandas
+        # prikazao ispravno lokalno vrijeme bez pogrešnog offseta (npr. 23:23 umjesto 11:23)
+        df_display['timestamp'] = df_display['timestamp'].dt.tz_localize(None).dt.strftime('%d.%m.%Y %H:%M:%S')
         
         st.dataframe(df_display, use_container_width=True, height=400)
         
         # --- Footer ---
         st.divider()
         
-        # ISPRAVKA PRIKAZA: Pretvaramo Pandas Timestamp u standardni Python datetime objekt
-        # da budemo sigurni da se formatiranje primjenjuje na lokalno vrijeme (11:23:02)
+        # Footer ispravka: korištenje .to_pydatetime() je već bilo dobro, ali ovdje 
+        # možemo koristiti i novi pristup de-lokalizacije za konzistentnost
         local_timestamp = latest['timestamp'].to_pydatetime()
         
         st.caption(f"📅 Zadnje mjerenje: {local_timestamp.strftime('%d.%m.%Y %H:%M:%S')}")
