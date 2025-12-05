@@ -8,7 +8,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import time
-import pytz # DODAN IMPORT
+import pytz 
 
 # --- Konfiguracija stranice ---
 st.set_page_config(
@@ -20,7 +20,7 @@ st.set_page_config(
 # --- Konstante ---
 DB_URL = "https://www.dropbox.com/scl/fi/5m2y0t8vmj5e0mg2cc5j7/airq.db?rlkey=u9wgei8etxf3go1fke1orarom&st=v1b5nhe5&dl=1"
 LOCAL_DB = "airq.db"
-ZAGREB_TZ = pytz.timezone('Europe/Zagreb') # DEFINIRANA VREMENSKA ZONA
+ZAGREB_TZ = pytz.timezone('Europe/Zagreb')
 
 # --- Cachirana funkcija za preuzimanje baze ---
 @st.cache_data(ttl=60)
@@ -54,14 +54,12 @@ def load_data(location_id, start_dt, end_dt):
     conn.close()
     
     if not df.empty:
-        # Pretpostavljamo da su timestampovi u bazi već u lokalnom vremenu,
-        # ali ih parsiramo i onda postavljamo TZ za konzistentnost.
         df["timestamp"] = pd.to_datetime(df["timestamp"])
-        # Dodajemo TZ informaciju ako nije prisutna
+        
+        # OBAVEZNA LOKALIZACIJA: pretpostavlja se da su zapisi u bazi snimljeni kao lokalno vrijeme
         if df["timestamp"].dt.tz is None:
-             # Ovdje pretpostavljamo da su zapisi u bazi snimljeni kao lokalno vrijeme (UTC+1/2)
-            df["timestamp"] = df["timestamp"].dt.tz_localize(ZAGREB_TZ)
-
+            df["timestamp"] = df["timestamp"].dt.tz_localize(ZAGREB_TZ, ambiguous='NaT', nonexistent='NaT')
+        
     return df
 
 # --- Funkcija za kvalitativnu ocjenu ---
@@ -311,7 +309,7 @@ try:
             
             st.rerun()
         
-        # ISPRAVLJENI PRIKAZ VREMENA KORIŠTENJEM now_tz
+        # PRIKAZ VREMENA OSVJEŽAVANJA
         st.caption(f"⏰ Zadnje osvježavanje: {now_tz.strftime('%d.%m.%Y %H:%M:%S')}")
         
         st.divider()
@@ -346,9 +344,8 @@ try:
             start_datetime = now_tz - timedelta(days=30)
             end_datetime = now_tz
         else:
-            # Koristimo "naivni" datetime za input jer ga Streamlit tako traži, 
-            # ali ga pretvaramo u TZ-aware objekt za učitavanje.
-            naive_now = now_tz.replace(tzinfo=None) # Ukloni TZ za widget
+            # Ukloni TZ za widget za odabir datuma, ali koristi ispravnu lokalnu zonu
+            naive_now = now_tz.replace(tzinfo=None) 
             
             start_date = st.date_input("Od:", naive_now.date() - timedelta(days=7))
             end_date = st.date_input("Do:", naive_now.date())
@@ -365,10 +362,7 @@ try:
 
     # --- Učitaj podatke ---
     with st.spinner("Učitavanje podataka..."):
-        # Formatiraj datetime u ISO format koji odgovara bazi (YYYY-MM-DDTHH:MM:SS)
-        # Ovdje pretvaramo TZ-aware objekte u stringove (npr. '2025-12-05 11:42:35+01:00')
-        # SQLite obično radi s naivnim stringovima, pa uklanjamo TZ informaciju za upit.
-        # Pretpostavka je da su zapisi u bazi snimljeni kao lokalno vrijeme.
+        # Formatiraj datetime za SQLite upit (koji očekuje naivni string, npr. '2025-12-05 11:23:02')
         start_str = start_datetime.strftime('%Y-%m-%d %H:%M:%S')
         end_str = end_datetime.strftime('%Y-%m-%d %H:%M:%S')
         
@@ -447,17 +441,21 @@ try:
 
         # --- Sirovi podaci (uvijek prikazani) ---
         st.header("📋 Tablica Podataka")
-        # Prikazivanje timestampa u ispravnom formatu i zoni
-        df_display = df.drop(columns=["id", "locationID"]).sort_values("timestamp", ascending=False)
+        df_display = df.drop(columns=["id", "locationID"]).sort_values("timestamp", ascending=False).copy()
         
-        # Pretvorba u naivni datetime prije prikaza ako Streamlit ne voli TZ-aware objekte
+        # Formatiranje TZ-aware timestampa u tablici radi čitljivosti
         df_display['timestamp'] = df_display['timestamp'].dt.strftime('%d.%m.%Y %H:%M:%S')
         
         st.dataframe(df_display, use_container_width=True, height=400)
         
         # --- Footer ---
         st.divider()
-        st.caption(f"📅 Zadnje mjerenje: {latest['timestamp'].strftime('%d.%m.%Y %H:%M:%S')}")
+        
+        # ISPRAVKA PRIKAZA: Pretvaramo Pandas Timestamp u standardni Python datetime objekt
+        # da budemo sigurni da se formatiranje primjenjuje na lokalno vrijeme (11:23:02)
+        local_timestamp = latest['timestamp'].to_pydatetime()
+        
+        st.caption(f"📅 Zadnje mjerenje: {local_timestamp.strftime('%d.%m.%Y %H:%M:%S')}")
         st.caption(f"📊 Ukupno mjerenja: {len(df)}")
 
 except Exception as e:
