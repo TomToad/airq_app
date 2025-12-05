@@ -54,7 +54,8 @@ def load_data(location_id, start_dt, end_dt):
     conn.close()
     
     if not df.empty:
-        df["timestamp"] = pd.to_datetime(df["timestamp"])
+        # Pokušaj parsirati timestamp - radi sa svim formatima
+        df["timestamp"] = pd.to_datetime(df["timestamp"], format='mixed', utc=True).dt.tz_convert(ZAGREB_TZ)
     
     return df
 
