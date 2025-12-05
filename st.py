@@ -4,6 +4,7 @@ import sqlite3
 import os
 import requests
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -19,6 +20,7 @@ st.set_page_config(
 # --- Konstante ---
 DB_URL = "https://www.dropbox.com/scl/fi/5m2y0t8vmj5e0mg2cc5j7/airq.db?rlkey=u9wgei8etxf3go1fke1orarom&st=v1b5nhe5&dl=1"
 LOCAL_DB = "airq.db"
+ZAGREB_TZ = ZoneInfo("Europe/Zagreb")
 
 # --- Cachirana funkcija za preuzimanje baze ---
 @st.cache_data(ttl=60)
@@ -298,7 +300,7 @@ try:
             
             st.rerun()
         
-        st.caption(f"⏰ Zadnje osvježavanje: {datetime.now().strftime('%H:%M:%S')}")
+        st.caption(f"⏰ Zadnje osvježavanje: {datetime.now(ZAGREB_TZ).strftime('%H:%M:%S')}")
         
         st.divider()
         
@@ -314,7 +316,7 @@ try:
         
         # Vremenski raspon
         st.subheader("📅 Vremenski raspon")
-        now = datetime.now()
+        now = datetime.now(ZAGREB_TZ)
         
         quick_select = st.radio(
             "Brzi odabir:",
