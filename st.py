@@ -8,6 +8,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import time
+import pytz # DODAN IMPORT
 
 # --- Konfiguracija stranice ---
 st.set_page_config(
@@ -19,6 +20,7 @@ st.set_page_config(
 # --- Konstante ---
 DB_URL = "https://www.dropbox.com/scl/fi/5m2y0t8vmj5e0mg2cc5j7/airq.db?rlkey=u9wgei8etxf3go1fke1orarom&st=v1b5nhe5&dl=1"
 LOCAL_DB = "airq.db"
+ZAGREB_TZ = pytz.timezone('Europe/Zagreb') # DEFINIRANA VREMENSKA ZONA
 
 # --- Cachirana funkcija za preuzimanje baze ---
 @st.cache_data(ttl=60)
@@ -52,9 +54,14 @@ def load_data(location_id, start_dt, end_dt):
     conn.close()
     
     if not df.empty:
-        # Jednostavno - svi timestampovi su u lokalnom vremenu
+        # Pretpostavljamo da su timestampovi u bazi već u lokalnom vremenu,
+        # ali ih parsiramo i onda postavljamo TZ za konzistentnost.
         df["timestamp"] = pd.to_datetime(df["timestamp"])
-    
+        # Dodajemo TZ informaciju ako nije prisutna
+        if df["timestamp"].dt.tz is None:
+             # Ovdje pretpostavljamo da su zapisi u bazi snimljeni kao lokalno vrijeme (UTC+1/2)
+            df["timestamp"] = df["timestamp"].dt.tz_localize(ZAGREB_TZ)
+
     return df
 
 # --- Funkcija za kvalitativnu ocjenu ---
@@ -279,6 +286,9 @@ try:
     if locations_df.empty:
         st.warning("Nema lokacija u bazi.")
         st.stop()
+    
+    # Dohvati trenutno vrijeme u lokalnoj zoni (CET/CEST)
+    now_tz = datetime.now(ZAGREB_TZ)
 
     # --- Sidebar: Kontrole ---
     with st.sidebar:
@@ -288,6 +298,8 @@ try:
         if st.button("🔄 Osvježi podatke", use_container_width=True):
             # Obriši SVE cache-ove
             st.cache_data.clear()
+            # Ažurirajte 'now_tz' kako bi prikazao točno vrijeme nakon klika i reruna
+            now_tz = datetime.now(ZAGREB_TZ)
             
             # Forsiraj novi download baze
             with st.spinner("Preuzimanje najnovije baze..."):
@@ -299,7 +311,8 @@ try:
             
             st.rerun()
         
-        st.caption(f"⏰ Zadnje osvježavanje: {datetime.now().strftime('%H:%M:%S')}")
+        # ISPRAVLJENI PRIKAZ VREMENA KORIŠTENJEM now_tz
+        st.caption(f"⏰ Zadnje osvježavanje: {now_tz.strftime('%d.%m.%Y %H:%M:%S')}")
         
         st.divider()
         
@@ -315,7 +328,6 @@ try:
         
         # Vremenski raspon
         st.subheader("📅 Vremenski raspon")
-        now = datetime.now()
         
         quick_select = st.radio(
             "Brzi odabir:",
@@ -323,20 +335,27 @@ try:
             index=1
         )
         
+        # Određivanje start/end datetime bazirano na now_tz (ispravno lokalno vrijeme)
         if quick_select == "Posljednjih 24h":
-            start_datetime = now - timedelta(days=1)
-            end_datetime = now
+            start_datetime = now_tz - timedelta(days=1)
+            end_datetime = now_tz
         elif quick_select == "Posljednjih 7 dana":
-            start_datetime = now - timedelta(days=7)
-            end_datetime = now
+            start_datetime = now_tz - timedelta(days=7)
+            end_datetime = now_tz
         elif quick_select == "Posljednjih 30 dana":
-            start_datetime = now - timedelta(days=30)
-            end_datetime = now
+            start_datetime = now_tz - timedelta(days=30)
+            end_datetime = now_tz
         else:
-            start_date = st.date_input("Od:", now - timedelta(days=7))
-            end_date = st.date_input("Do:", now)
-            start_datetime = datetime.combine(start_date, datetime.min.time())
-            end_datetime = datetime.combine(end_date, datetime.max.time())
+            # Koristimo "naivni" datetime za input jer ga Streamlit tako traži, 
+            # ali ga pretvaramo u TZ-aware objekt za učitavanje.
+            naive_now = now_tz.replace(tzinfo=None) # Ukloni TZ za widget
+            
+            start_date = st.date_input("Od:", naive_now.date() - timedelta(days=7))
+            end_date = st.date_input("Do:", naive_now.date())
+            
+            # Postavi TZ informaciju nazad za konačne varijable
+            start_datetime = ZAGREB_TZ.localize(datetime.combine(start_date, datetime.min.time()))
+            end_datetime = ZAGREB_TZ.localize(datetime.combine(end_date, datetime.max.time()))
         
         st.divider()
         
@@ -347,8 +366,12 @@ try:
     # --- Učitaj podatke ---
     with st.spinner("Učitavanje podataka..."):
         # Formatiraj datetime u ISO format koji odgovara bazi (YYYY-MM-DDTHH:MM:SS)
-        start_str = start_datetime.strftime('%Y-%m-%dT%H:%M:%S')
-        end_str = end_datetime.strftime('%Y-%m-%dT%H:%M:%S')
+        # Ovdje pretvaramo TZ-aware objekte u stringove (npr. '2025-12-05 11:42:35+01:00')
+        # SQLite obično radi s naivnim stringovima, pa uklanjamo TZ informaciju za upit.
+        # Pretpostavka je da su zapisi u bazi snimljeni kao lokalno vrijeme.
+        start_str = start_datetime.strftime('%Y-%m-%d %H:%M:%S')
+        end_str = end_datetime.strftime('%Y-%m-%d %H:%M:%S')
+        
         df = load_data(selected_loc_id, start_str, end_str)
 
     if df.empty:
@@ -424,7 +447,12 @@ try:
 
         # --- Sirovi podaci (uvijek prikazani) ---
         st.header("📋 Tablica Podataka")
+        # Prikazivanje timestampa u ispravnom formatu i zoni
         df_display = df.drop(columns=["id", "locationID"]).sort_values("timestamp", ascending=False)
+        
+        # Pretvorba u naivni datetime prije prikaza ako Streamlit ne voli TZ-aware objekte
+        df_display['timestamp'] = df_display['timestamp'].dt.strftime('%d.%m.%Y %H:%M:%S')
+        
         st.dataframe(df_display, use_container_width=True, height=400)
         
         # --- Footer ---
