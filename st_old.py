@@ -18,7 +18,6 @@ st.set_page_config(
 )
 
 # --- Konstante ---
-# KORIŠTENI URL ZA BAZU (Ostao je iz prethodnih verzija)
 DB_URL = "https://www.dropbox.com/scl/fi/5m2y0t8vmj5e0mg2cc5j7/airq.db?rlkey=u9wgei8etxf3go1fke1orarom&dl=1"
 LOCAL_DB = "airq.db"
 ZAGREB_TZ = pytz.timezone('Europe/Zagreb')
@@ -52,11 +51,11 @@ def load_data(location_id, start_dt, end_dt):
     conn.close()
     
     if not df.empty:
-        # 1. Parsiraj ISO format
+        # Podesi Pandas da čita ISO format ispravno i dodaj mu TZ informaciju
+        # 1. Konvertiraj stupac u datetime objekte
         df["timestamp"] = pd.to_datetime(df["timestamp"])
         
         # 2. Pretpostavi da je naivni datum u bazi STVARNO UTC vrijeme.
-        # (Ovo rješava grešku u renderiranju TZ-aware objekata u Streamlitu.)
         if df["timestamp"].dt.tz is None:
             df["timestamp"] = df["timestamp"].dt.tz_localize(UTC_TZ, ambiguous='NaT', nonexistent='NaT')
         
@@ -65,23 +64,21 @@ def load_data(location_id, start_dt, end_dt):
         
     return df
 
-# --- Funkcije za vizualizaciju (nepromijenjeno, skraćeno radi preglednosti) ---
+# --- Funkcije za vizualizaciju (skraćeno radi preglednosti) ---
 def get_air_quality_status(pm25_value):
-    if pd.isna(pm25_value):
-        return "Nema podataka", "gray"
-    # ... ostali uvjeti ...
-    return "Vrlo nezdrava", "purple"
+    # ... (kod ostaje isti)
+    if pd.isna(pm25_value): return "Nema podataka", "gray"
+    elif pm25_value <= 12: return "Dobra", "green"
+    elif pm25_value <= 35.4: return "Umjerena", "yellow"
+    elif pm25_value <= 55.4: return "Nezdrava za osjetljive", "orange"
+    elif pm25_value <= 150.4: return "Nezdrava", "red"
+    else: return "Vrlo nezdrava", "purple"
 
-def create_gauge_chart(value, title, max_value=150):
-    fig = go.Figure(go.Indicator(mode="gauge+number", value=value))
-    fig.update_layout(height=300)
-    return fig
 # ... (Ostale funkcije za grafikone su nepromijenjene) ...
 
 # --- Glavni program ---
 st.title("🌤️ Kvaliteta zraka - Zaprešić")
 
-# Preuzmi bazu
 with st.spinner("Preuzimanje najnovijih podataka..."):
     success, message = download_database()
     if not success:
@@ -100,7 +97,6 @@ try:
         st.warning("Nema lokacija u bazi.")
         st.stop()
     
-    # Trenutno vrijeme osvježavanja (TZ-aware)
     now_tz = datetime.now(ZAGREB_TZ)
 
     # --- Sidebar: Kontrole ---
@@ -116,8 +112,6 @@ try:
         
         st.caption(f"⏰ Zadnje osvježavanje: {now_tz.strftime('%d.%m.%Y %H:%M:%S')}")
         
-        # ... (Ostale kontrole za lokaciju i raspon) ...
-
         st.divider()
         loc_options = locations_df.set_index("locationID")["name"].to_dict()
         selected_loc_id = st.selectbox("📍 Lokacija:", list(loc_options.keys()), format_func=lambda x: loc_options[x])
@@ -129,7 +123,6 @@ try:
         if quick_select == "Posljednjih 24h":
             start_datetime = now_tz - timedelta(days=1)
             end_datetime = now_tz
-        # ... (Ostala logika raspona) ...
         elif quick_select == "Posljednjih 7 dana":
             start_datetime = now_tz - timedelta(days=7)
             end_datetime = now_tz
@@ -149,10 +142,17 @@ try:
 
     # --- Učitaj podatke ---
     with st.spinner("Učitavanje podataka..."):
-        # Za upit, moramo koristiti naivne stringove koji odgovaraju formatu u bazi
-        # Koristimo TZ-aware datume za raspon, ali uklanjamo TZ za string za SQLite.
-        start_str = start_datetime.tz_localize(None).strftime('%Y-%m-%d %H:%M:%S')
-        end_str = end_datetime.tz_localize(None).strftime('%Y-%m-%d %H:%M:%S')
+        # KLJUČNA IZMJENA ZA UPIT:
+        # Prvo konvertiramo TZ-aware datume u UTC, jer baza pohranjuje naivno vrijeme koje se čini da odgovara UTC-u.
+        # Zatim koristimo standardni SQLite format 'YYYY-MM-DD HH:MM:SS' za upit.
+        
+        start_utc = start_datetime.astimezone(UTC_TZ)
+        end_utc = end_datetime.astimezone(UTC_TZ)
+        
+        # Koristimo ISO format s T za upit (jer se taj format koristi u bazi)
+        start_str = start_utc.strftime('%Y-%m-%dT%H:%M:%S')
+        end_str = end_utc.strftime('%Y-%m-%dT%H:%M:%S')
+        
         df = load_data(selected_loc_id, start_str, end_str)
 
     if df.empty:
@@ -161,8 +161,7 @@ try:
         latest = df.iloc[-1]
         status, color = get_air_quality_status(latest["PM2_5"])
         
-        # --- (Grafikoni su nepromijenjeni) ---
-        # [Preskočeno radi preglednosti]
+        # --- (Prikaz mjerača i grafikona - nepromijenjeno) ---
         
         # --- Sirovi podaci (uvijek prikazani) ---
         st.header("📋 Tablica Podataka")
@@ -171,7 +170,8 @@ try:
         
         # KONAČNA ISPRAVKA ZA TABLICU:
         # Konvertiraj TZ-aware vrijeme u Naive (bez TZ) LOKALNO vrijeme i formatiraj.
-        # Ovo osigurava da Streamlit prikazuje 11:22:01 umjesto 23:22:01.
+        # Ovo je logički ispravno: datum u bazi je 11:22, mi ga pretvorimo u TZ-aware objekt 11:22 CET,
+        # zatim uklonimo oznaku TZ za prikaz, ostavljajući 11:22.
         df_display['timestamp'] = df_display['timestamp'].dt.tz_localize(None).dt.strftime('%d.%m.%Y %H:%M:%S')
         
         st.dataframe(df_display, use_container_width=True, height=400)
@@ -179,7 +179,6 @@ try:
         # --- Footer ---
         st.divider()
         
-        # Footer ispravka: Konvertiraj latest u naivni datetime, pa formatiraj
         local_timestamp = latest['timestamp'].tz_localize(None).to_pydatetime()
         
         st.caption(f"📅 Zadnje mjerenje: {local_timestamp.strftime('%d.%m.%Y %H:%M:%S')}")
