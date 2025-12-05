@@ -278,6 +278,13 @@ try:
     with st.sidebar:
         st.header("⚙️ Postavke")
         
+        # Gumb za osvježavanje
+        if st.button("🔄 Osvježi podatke", use_container_width=True):
+            st.cache_data.clear()
+            st.rerun()
+        
+        st.divider()
+        
         # Odabir lokacije
         loc_options = locations_df.set_index("locationID")["name"].to_dict()
         selected_loc_id = st.selectbox(
