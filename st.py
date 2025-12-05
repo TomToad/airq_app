@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import time
 
 # --- Konfiguracija stranice ---
 st.set_page_config(
@@ -20,11 +21,15 @@ DB_URL = "https://www.dropbox.com/scl/fi/5m2y0t8vmj5e0mg2cc5j7/airq.db?rlkey=u9w
 LOCAL_DB = "airq.db"
 
 # --- Cachirana funkcija za preuzimanje baze ---
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=60)
 def download_database():
     """Preuzmi bazu s Dropboxa"""
     try:
-        r = requests.get(DB_URL, timeout=10)
+        # Dodaj timestamp za cache-busting
+        cache_buster = f"&_t={int(time.time())}"
+        url = DB_URL + cache_buster
+        
+        r = requests.get(url, timeout=10)
         r.raise_for_status()
         with open(LOCAL_DB, "wb") as f:
             f.write(r.content)
@@ -33,7 +38,7 @@ def download_database():
         return False, str(e)
 
 # --- Cachirana funkcija za učitavanje podataka ---
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=60)
 def load_data(location_id, start_dt, end_dt):
     """Učitaj podatke iz baze"""
     conn = sqlite3.connect(LOCAL_DB)
@@ -280,8 +285,20 @@ try:
         
         # Gumb za osvježavanje
         if st.button("🔄 Osvježi podatke", use_container_width=True):
+            # Obriši SVE cache-ove
             st.cache_data.clear()
+            
+            # Forsiraj novi download baze
+            with st.spinner("Preuzimanje najnovije baze..."):
+                success, msg = download_database()
+                if success:
+                    st.success("✅ Baza osvježena!")
+                else:
+                    st.warning(f"⚠️ {msg}")
+            
             st.rerun()
+        
+        st.caption(f"⏰ Zadnje osvježavanje: {datetime.now().strftime('%H:%M:%S')}")
         
         st.divider()
         
