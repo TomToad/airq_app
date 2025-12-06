@@ -234,7 +234,7 @@ def create_pm_stacked_chart(df, height=400):
                   annotation_text="Nezdrava razina (55.4)", annotation_position="right")
     
     fig.update_layout(
-        title="Čestične Tvari (PM10 vs PM2.5)",
+        title="Čestice (PM10 vs PM2.5)",
         xaxis_title="Vrijeme",
         yaxis_title="Koncentracija (µg/m³)",
         height=height,
@@ -459,7 +459,7 @@ try:
         
         st.divider()
         
-        st.header("🌫️ Čestične Tvari")
+        st.header("🌫️ Čestice")
         fig_pm = create_pm_stacked_chart(df, chart_height)
         st.plotly_chart(fig_pm, use_container_width=True)
         
